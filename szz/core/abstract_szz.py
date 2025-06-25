@@ -65,10 +65,29 @@ class AbstractSZZ(ABC):
 
         self._repository = Repo(self._repository_path)
 
-    def __del__(self):
-        log.info("cleanup objects...")
-        self.__cleanup_repo()
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Garante a limpeza e registra qualquer exceção que tenha ocorrido
+        dentro do bloco 'with'.
+        """
+        # Se uma exceção ocorreu dentro do bloco 'with', exc_type não será None.
+        if exc_type is not None:
+            log.error("Uma exceção ocorreu dentro do bloco SZZ. Detalhes abaixo:")
+            # Usa o módulo traceback para formatar a exceção que foi passada
+            formatted_exception = "".join(traceback.format_exception(exc_type, exc_val, exc_tb))
+            log.error(formatted_exception)
+        
+        log.info("Iniciando limpeza de objetos e diretórios temporários...")
         self.__clear_gitpython()
+        self.__cleanup_repo()
+
+    # def __del__(self):
+    #     log.info("cleanup objects...")
+    #     self.__cleanup_repo()
+    #     self.__clear_gitpython()
 
     @property
     def repository(self) -> Repo:
@@ -175,7 +194,7 @@ class AbstractSZZ(ABC):
             file must be in the same format as an fsck.skipList (https://git-scm.com/docs/git-blame)
         :returns Set[BlameData] a set of bug introducing commits candidates, represented by BlameData object
         """
-
+        skip_comments = False
         kwargs = dict()
         if ignore_whitespaces:
             kwargs['w'] = True
@@ -270,13 +289,13 @@ class AbstractSZZ(ABC):
     def __cleanup_repo(self):
         """ Cleanup of local repository used by SZZ """
         if os.path.isdir(self.__temp_dir):
-            rmtree(self.__temp_dir)
+            rmtree(self.__temp_dir, ignore_errors=True)
 
     def __clear_gitpython(self):
         """ Cleanup of GitPython due to memory problems """
         if self._repository:
             self._repository.close()
-            self._repository.__del__()
+            # self._repository.__del__()
 class ImpactedFile:
     """ Data class to represent impacted files """
     def __init__(self, file_path: str, modified_lines: List[int]):

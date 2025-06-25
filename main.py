@@ -54,7 +54,8 @@ def main(input_json: str, out_json: str, conf: dict(), repos_dir: str):
                                         ignore_revs_file_path=conf.get('ignore_revs_file_path'),
                                         max_change_size=conf.get('max_change_size'),
                                         issue_date_filter=conf.get('issue_date_filter'),
-                                        issue_date=commit_issue_date)
+                                        issue_date=commit_issue_date,
+                                        commented_lines=conf.get('commented_lines', False))
 
         elif szz_name == 'ma':
             ma_szz = MASZZ(repo_full_name=repo_name, repo_url=repo_url, repos_dir=repos_dir)
@@ -89,12 +90,12 @@ def main(input_json: str, out_json: str, conf: dict(), repos_dir: str):
                                         issue_date_filter=conf.get('issue_date_filter'),
                                         issue_date=commit_issue_date)
         elif szz_name == 'ra':
-            ra_szz = RASZZ(repo_full_name=repo_name, repo_url=repo_url, repos_dir=repos_dir)
-            imp_files = ra_szz.get_impacted_files(fix_commit_hash=fix_commit, file_ext_to_parse=conf.get('file_ext_to_parse'), only_deleted_lines=conf.get('only_deleted_lines', True))
-            bug_introducing_commits = ra_szz.find_bic(fix_commit_hash=fix_commit,
-                                        impacted_files=imp_files,
-                                        ignore_revs_file_path=conf.get('ignore_revs_file_path'),
-                                        max_change_size=conf.get('max_change_size'),
+            with RASZZ(repo_full_name=repo_name, repo_url=repo_url, repos_dir=repos_dir) as ra_szz:
+                imp_files = ra_szz.get_impacted_files(fix_commit_hash=fix_commit, file_ext_to_parse=conf.get('file_ext_to_parse'), only_deleted_lines=conf.get('only_deleted_lines', True))
+                bug_introducing_commits = ra_szz.find_bic(fix_commit_hash=fix_commit,
+                                            impacted_files=imp_files,
+                                            ignore_revs_file_path=conf.get('ignore_revs_file_path'),
+                                            max_change_size=conf.get('max_change_size'),
                                         detect_move_from_other_files=DetectLineMoved(conf.get('detect_move_from_other_files')),
                                         issue_date_filter=conf.get('issue_date_filter'),
                                         issue_date=commit_issue_date)

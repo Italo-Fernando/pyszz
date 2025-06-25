@@ -2,6 +2,8 @@ import json
 import logging as log
 import os
 import tempfile
+import subprocess
+import platform
 from typing import List, Set
 
 from options import Options
@@ -25,16 +27,57 @@ class RASZZ(MASZZ):
     def __init__(self, repo_full_name: str, repo_url: str, repos_dir: str = None):
         super().__init__(repo_full_name, repo_url, repos_dir)
 
-    def _extract_refactorings(self, commits):
-        PATH_TO_REFMINER = os.path.join(Options.PYSZZ_HOME, 'tools/RefactoringMiner-2.0/bin/RefactoringMiner')
+    def _extract_refactorings(self, commits_hashes: list) -> dict:
+        """
+        Executa o RefactoringMiner em uma lista de commits e retorna as refatorações encontradas.
+        Esta versão usa subprocess para capturar stdout e stderr, permitindo uma depuração robusta.
+        """
+        # Constrói o caminho para o executável do RefactoringMiner e ajusta para Windows se necessário
+        path_to_refminer = os.path.join(Options.PYSZZ_HOME, 'tools/', 'RefactoringMiner-2.0/', 'bin/', 'RefactoringMiner')
+        if platform.system() == "Windows":
+            path_to_refminer += '.bat'
 
-        refactorings = dict()
-        for commit in commits:
-            if not commit in refactorings:
-                with tempfile.NamedTemporaryFile(mode='r+') as tmpfile:
-                    log.info(f'Running RefMiner on {commit}')
-                    os.system(f'"{PATH_TO_REFMINER}" -c "{self._repository_path}" {commit} > {tmpfile.name}')
-                    refactorings[commit] = json.loads(tmpfile.read())
+        refactorings = {}
+        for commit in commits_hashes:
+            if commit in refactorings:
+                continue
+
+            log.info(f'Running RefMiner on {commit}')
+            
+            # Monta o comando como uma lista, que é mais seguro
+            command = [
+                path_to_refminer,
+                '-c',
+                self._repository_path,
+                commit
+            ]
+
+            # Executa o comando usando subprocess.run
+            result = subprocess.run(command, capture_output=True, text=True, encoding='utf-8', errors='replace')
+
+            # Verifica se o comando foi executado com sucesso (código de saída 0)
+            if result.returncode != 0:
+                log.error(f"RefactoringMiner falhou para o commit {commit} com código de saída {result.returncode}")
+                log.error(f"--- MENSAGEM DE ERRO (stderr) DO REFACTORINGMINER ---")
+                log.error(result.stderr if result.stderr else "Nenhuma saída de erro capturada.")
+                log.error(f"----------------------------------------------------")
+                # Atribui um resultado vazio para não quebrar o script principal
+                refactorings[commit] = {"commits": []}
+            else:
+                # Se funcionou, tenta carregar o JSON da saída padrão (stdout)
+                try:
+                    # Verifica se a saída não está vazia antes de tentar decodificar
+                    if result.stdout:
+                        refactorings[commit] = json.loads(result.stdout)
+                    else:
+                        log.warning(f"RefactoringMiner não produziu nenhuma saída para o commit {commit}.")
+                        refactorings[commit] = {"commits": []}
+                except json.JSONDecodeError:
+                    log.error(f"JSONDecodeError ao processar a saída do RefactoringMiner para o commit {commit}.")
+                    log.error(f"--- SAÍDA RECEBIDA (stdout) ---")
+                    log.error(result.stdout)
+                    log.error(f"-------------------------------")
+                    refactorings[commit] = {"commits": []}
 
         return refactorings
 
